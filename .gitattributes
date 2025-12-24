@@ -1,0 +1,1 @@
+dinov3/weight/dinov3_vits16plus_pretrain_lvd1689m-4057cbaa.pth filter=lfs diff=lfs merge=lfs -text
