@@ -19,7 +19,7 @@ base_weights_path = '/home/abc/projects/DINOv3/dinov3/weight/dinov3_vits16plus_p
 
 # [新增] 训练好的 Student LoRA 权重文件夹路径
 # 这里指向你训练脚本保存的 output 目录，例如 'output/student_final'
-lora_weights_path = '../../dinov3_finetune/student_weights/ori_train/student_encoder_epoch_20' 
+lora_weights_path = '../../dinov3_finetune/student_weights/teacher_student_ori_1/student_encoder_epoch_40' 
 
 # 检查是否有 GPU
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -69,9 +69,9 @@ def process_image(img_path, out_folder):
     img_resized = img.resize((new_w, new_h), resample=Image.BICUBIC)
     
     # === [修改点 2] 保存放大的图像 ===
-    upscaled_filename = f"upscaled_{img_path.name}"
-    upscaled_save_path = os.path.join(out_folder, upscaled_filename)
-    img_resized.save(upscaled_save_path)
+    # upscaled_filename = f"upscaled_{img_path.name}"
+    # upscaled_save_path = os.path.join(out_folder, upscaled_filename)
+    # img_resized.save(upscaled_save_path)
 
     # 转为 Tensor 并移至 GPU
     img_tensor = transform(img_resized).unsqueeze(0).to(device)
@@ -136,19 +136,19 @@ def process_image(img_path, out_folder):
 # === 4. 执行循环 ===
 
 # 处理 Sim_1T
-input_dir_1 = Path('../train_pic/Sim_1T_test')
+input_dir_1 = Path('../train_pic/test/Sim_1T_256_test')
 if input_dir_1.exists():
     print(f"\n--- Processing {input_dir_1} ---")
     images = list(input_dir_1.glob('*.png')) + list(input_dir_1.glob('*.jpg'))
     for img_path in sorted(images):
-        process_image(img_path, '../PCA_pic/1T_huge_finetune') # 修改输出文件夹名称以区分
+        process_image(img_path, '../PCA_pic/1T') # 修改输出文件夹名称以区分
 
 # 处理 Sim_2H
-input_dir_2 = Path('../train_pic/Sim_2H_test')
+input_dir_2 = Path('../train_pic/test/Sim_2H_256_test')
 if input_dir_2.exists():
     print(f"\n--- Processing {input_dir_2} ---")
     images = list(input_dir_2.glob('*.png')) + list(input_dir_2.glob('*.jpg'))
     for img_path in sorted(images):
-        process_image(img_path, '../PCA_pic/2H_huge_finetune')
+        process_image(img_path, '../PCA_pic/2H')
 
 print("\nAll Processing complete.")

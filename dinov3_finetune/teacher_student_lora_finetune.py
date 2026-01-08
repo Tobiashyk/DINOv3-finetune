@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
+import torch.nn.functional as F
 from PIL import Image
 import numpy as np
 import random
@@ -18,6 +19,22 @@ from peft import LoraConfig, get_peft_model
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
+
+def set_seed(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
 
 class MIMAugmentation:
     """MIM augmentation: RandomResizedCrop for zooming into local structures."""
@@ -38,7 +55,8 @@ class STEMDataset(Dataset):
         self.image_paths = []
         for root_dir in root_dirs:
             for ext in ['*.png', '*.jpg', '*.jpeg']:
-                self.image_paths.extend(list(Path(root_dir).glob(ext)))
+                paths = sorted(list(Path(root_dir).glob(ext)))
+                self.image_paths.extend(paths)
 
         self.transform = transform
         self.augmentation = augmentation
@@ -50,20 +68,23 @@ class STEMDataset(Dataset):
         img_path = self.image_paths[idx]
         img = Image.open(img_path).convert('RGB')
 
-        # Apply MIM augmentation
+        # Global view (full image)
+        global_view = img
+
+        # Apply MIM augmentation for local view
         if self.augmentation:
-            augmented_img = self.augmentation(img)
+            local_view = self.augmentation(img)
         else:
-            augmented_img = img
+            local_view = img
 
         if self.transform:
-            # img = self.transform(img)
-            view_tensor = self.transform(augmented_img)
+            global_view = self.transform(global_view)
+            local_view = self.transform(local_view)
 
-        return view_tensor
+        return global_view, local_view
 
 def apply_mask(img_tensor, mask_ratio=0.5):
-    """Apply random mask to image tensor."""
+    """Apply random mask to image tensor at patch level."""
     batch_size, channels, height, width = img_tensor.shape
 
     # Create random mask at patch level
@@ -171,26 +192,40 @@ def dino_loss(student_cls, teacher_cls, temperature=0.1):
     # student_cls and teacher_cls: [batch_size, out_dim]
 
     # Compute logits
-    teacher_logits = teacher_cls / temperature
-    student_logits = student_cls / temperature
+    # teacher_logits = teacher_cls / (temperature - 0.03)
+    # student_logits = student_cls / temperature
+    student_temp = temperature
+    teacher_temp = temperature - 0.03
 
     # Cross-entropy loss: student learns to predict teacher
-    loss = nn.functional.cross_entropy(student_logits, teacher_logits.argmax(dim=-1))
+    # loss = nn.functional.cross_entropy(student_logits, teacher_logits.argmax(dim=-1))
+    student_log_probs = F.log_softmax(student_cls / student_temp, dim=-1)
+    teacher_probs = F.softmax((teacher_cls / teacher_temp).detach(), dim=-1)
+    loss = torch.sum(-teacher_probs * student_log_probs, dim=-1).mean()
 
     return loss
 
-def ibot_loss(student_patches, teacher_patches, mask_patches):
-    """iBOT loss: MSE between student patches and teacher patches for masked regions."""
+def ibot_loss(student_patches, teacher_patches, temperature=0.1):
+    """iBOT loss: Cross-entropy between student and teacher patch tokens."""
     # student_patches: [batch_size, num_patches, emb_dim]
     # teacher_patches: [batch_size, num_patches, emb_dim]
-    # mask_patches: [batch_size, num_patches] (binary mask indicating which patches are masked)
 
-    # Compute MSE loss only for masked patches
-    diff = (student_patches - teacher_patches) ** 2  # [batch_size, num_patches, emb_dim]
-    masked_diff = diff * mask_patches.unsqueeze(-1)  # Apply mask
+    batch_size, num_patches, emb_dim = student_patches.shape
 
-    # Sum over embedding dimension and batch
-    loss = masked_diff.sum() / (mask_patches.sum() + 1e-8)
+    # Normalize features
+    student_norm = F.normalize(student_patches, dim=-1)
+    teacher_norm = F.normalize(teacher_patches, dim=-1)
+
+    # Compute similarity matrix: [batch_size, num_patches, num_patches]
+    sim_matrix = torch.matmul(student_norm, teacher_norm.transpose(-1, -2)) / temperature
+
+    # Cross-entropy loss: each student patch predicts corresponding teacher patch
+    labels = torch.arange(num_patches, device=sim_matrix.device).expand(batch_size, -1)
+    loss = F.cross_entropy(
+        sim_matrix.reshape(-1, num_patches),
+        labels.reshape(-1),
+        reduction='mean'
+    )
 
     return loss
 
@@ -206,36 +241,33 @@ def train_epoch(student, teacher, dataloader, optimizer, device, ema_decay, temp
     # for teacher_imgs, student_imgs in dataloader:
     #     teacher_imgs = teacher_imgs.to(device)
     #     student_imgs = student_imgs.to(device)
-    for images in dataloader:
-        images = images.to(device)
+    for global_view, local_view in dataloader:
+        global_view = global_view.to(device)
+        local_view = local_view.to(device)
 
-        # Apply random mask to student input
-        masked_imgs, mask = apply_mask(images, mask_ratio=0.5)
+        # Apply random mask to global view for iBOT
+        masked_global_view, mask = apply_mask(global_view, mask_ratio=0.5)
 
         optimizer.zero_grad()
 
-        # Teacher forward pass (no gradients, using full images)
+        # Teacher forward pass (using full global view, no mask)
         with torch.no_grad():
-            teacher_dino, teacher_mim, teacher_patches = teacher(images)
+            teacher_dino, teacher_mim, teacher_patches = teacher(global_view)
 
-        # Student forward pass (using masked images)
-        student_dino, student_mim, student_patches = student(masked_imgs)
+        # Student DINO forward pass (using full local view for CLS token)
+        student_dino, _, _ = student(local_view)
 
-        # Compute iBOT loss only (masked patch feature alignment)
-        # Create patch-level mask from image mask
-        patch_size = 16
-        h_patches = mask.shape[2] // patch_size
-        w_patches = mask.shape[3] // patch_size
+        # Student iBOT forward pass (using masked global view for patch tokens)
+        _, student_mim, _ = student(masked_global_view)
 
-        # Average across channels first, then pool spatially
-        mask_avg_channels = mask.float().mean(dim=1, keepdim=True)  # [batch_size, 1, H, W]
-        mask_patches = torch.nn.functional.avg_pool2d(mask_avg_channels, patch_size)  # [batch_size, 1, h_patches, w_patches]
-        mask_patches = mask_patches.view(mask.shape[0], -1)  # [batch_size, num_patches]
+        # Compute DINO loss (CLS token alignment between student and teacher)
+        loss_dino = dino_loss(student_dino, teacher_dino, temperature)
 
-        loss_ibot = ibot_loss(student_mim, teacher_mim, mask_patches)
+        # Compute iBOT loss (patch token alignment between student and teacher)
+        loss_ibot = ibot_loss(student_mim, teacher_mim, temperature)
 
-        # Use only iBOT loss
-        loss = loss_ibot
+        # Combined loss
+        loss = loss_dino + loss_ibot
 
         loss.backward()
         optimizer.step()
@@ -244,65 +276,16 @@ def train_epoch(student, teacher, dataloader, optimizer, device, ema_decay, temp
         update_teacher_ema(student, teacher, ema_decay)
 
         total_loss += loss.item()
+        total_dino_loss += loss_dino.item()
         total_ibot_loss += loss_ibot.item()
         step_count += 1
 
     avg_loss = total_loss / step_count
+    avg_dino_loss = total_dino_loss / step_count
     avg_ibot_loss = total_ibot_loss / step_count
 
-    return avg_loss, avg_ibot_loss
+    return avg_loss, avg_dino_loss, avg_ibot_loss
 
-def validate_and_visualize(student, test_dir, output_dir, device):
-    """Validate by processing Sim_2H_test images and creating PCA visualizations."""
-    student.eval()
-
-    os.makedirs(output_dir, exist_ok=True)
-
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-    ])
-
-    test_images = list(Path(test_dir).glob('*.png')) + list(Path(test_dir).glob('*.jpg'))
-
-    for img_path in test_images:
-        img = Image.open(img_path).convert('RGB')
-        w, h = img.size
-
-        new_w = (w // 16) * 16
-        new_h = (h // 16) * 16
-        img = img.resize((new_w, new_h), Image.BILINEAR)
-
-        img_tensor = transform(img).unsqueeze(0).to(device)
-
-        with torch.no_grad():
-            features = student.encoder.forward_features(img_tensor)
-            patch_features = features['x_norm_patchtokens'].squeeze(0)
-
-        h_grid = new_h // 16
-        w_grid = new_w // 16
-        patch_features_flat = patch_features.view(-1, patch_features.shape[-1]).cpu().numpy()
-
-        pca = PCA(n_components=4)
-        pca_result = pca.fit_transform(patch_features_flat)
-
-        fig, axs = plt.subplots(2, 2, figsize=(10, 10))
-        axs = axs.flatten()
-
-        for i in range(4):
-            component = pca_result[:, i]
-            heatmap = component.reshape(h_grid, w_grid)
-            heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min())
-
-            axs[i].imshow(heatmap, cmap='inferno')
-            axs[i].set_title(f"PCA Component {i+1}")
-            axs[i].axis('off')
-
-        output_path = os.path.join(output_dir, f"pca_{img_path.name}")
-        plt.savefig(output_path, bbox_inches='tight')
-        plt.close()
-
-        logging.info(f"Processed {img_path.name}")
 
 def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -310,6 +293,7 @@ def main(args):
 
     # Data preprocessing
     transform = transforms.Compose([
+        transforms.Resize((1024,1024)),
         transforms.ToTensor(),
         transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
     ])
@@ -317,9 +301,17 @@ def main(args):
     augmentation = MIMAugmentation(scale=(0.1, 0.5))
 
     # Dataset
-    train_dirs = ['../PCA/train_pic/Sim_huge_1T', '../PCA/train_pic/Sim_huge_2H']
+    train_dirs = ['../PCA/train_pic/Sim_1T_256', '../PCA/train_pic/Sim_2H_256']
     dataset = STEMDataset(train_dirs, transform=transform, augmentation=augmentation)
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
+    g = torch.Generator()
+    g.manual_seed(42)
+    dataloader = DataLoader(dataset,
+                            batch_size=args.batch_size,
+                            shuffle=True,
+                            num_workers=4,
+                            worker_init_fn=seed_worker,
+                            generator=g
+                            )
 
     # Load Student encoder with LoRA
     student_encoder_base = get_dino_model(weights_path=args.weights_path)
@@ -359,9 +351,9 @@ def main(args):
 
     # Training loop
     for epoch in range(args.epochs):
-        loss, ibot_loss = train_epoch(student, teacher, dataloader, optimizer, device,
+        loss, dino_loss, ibot_loss = train_epoch(student, teacher, dataloader, optimizer, device,
                                       args.ema_decay, args.temperature)
-        logging.info(f"Epoch {epoch+1}/{args.epochs}, Loss: {loss:.4f}, iBOT: {ibot_loss:.4f}")
+        logging.info(f"Epoch {epoch+1}/{args.epochs}, Loss: {loss:.4f}, DINO: {dino_loss:.4f}, iBOT: {ibot_loss:.4f}")
 
         if (epoch + 1) % args.save_freq == 0:
             # Save student weights
@@ -374,12 +366,13 @@ def main(args):
     torch.save(dino_head.state_dict(), "student_weights/dino_head_final.pth")
     torch.save(mim_head.state_dict(), "student_weights/mim_head_final.pth")
 
-    # Validation
-    logging.info("Starting validation with PCA visualization...")
-    validate_and_visualize(student, '../PCA/train_pic/Sim_2H_test', 'pca_results', device)
-    logging.info("Training and validation complete!")
+    logging.info("Training complete!")
+
 
 if __name__ == "__main__":
+
+    set_seed(42)
+
     parser = argparse.ArgumentParser(description="Teacher-Student DINO + iBOT LoRA Finetuning for DINOv3")
     parser.add_argument("--weights_path", type=str, default="../dinov3/weight/dinov3_vits16plus_pretrain_lvd1689m-4057cbaa.pth")
     parser.add_argument("--batch_size", type=int, default=2)  # Smaller batch size
@@ -391,8 +384,8 @@ if __name__ == "__main__":
     parser.add_argument("--lora_dropout", type=float, default=0.05)
     parser.add_argument("--ema_decay", type=float, default=0.996)
     parser.add_argument("--temperature", type=float, default=0.1)
-    parser.add_argument("--dino_out_dim", type=int, default=8192)  # Much smaller output dimension
-    parser.add_argument("--save_freq", type=int, default=20)
+    parser.add_argument("--dino_out_dim", type=int, default=384)  # Much smaller output dimension
+    parser.add_argument("--save_freq", type=int, default=10)
 
     args = parser.parse_args()
     main(args)

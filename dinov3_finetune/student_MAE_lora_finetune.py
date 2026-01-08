@@ -240,7 +240,7 @@ def main(args):
     # Training loop
     for epoch in range(args.epochs):
         loss = train_epoch(student, teacher, dataloader, optimizer, device, args.ema_decay)
-        logging.info(".4f")
+        logging.info(f"Epoch {epoch+1}/{args.epochs}, Loss: {loss:.4f}")
 
         if (epoch + 1) % args.save_freq == 0:
             student.encoder.save_pretrained(f"student_weights/student_encoder_epoch_{epoch+1}")
@@ -250,57 +250,6 @@ def main(args):
     student.encoder.save_pretrained("student_weights/student_encoder_final")
     torch.save(decoder.state_dict(), "student_weights/decoder_final.pth")
 
-def validate_and_visualize(student, test_dir, output_dir, device):
-    """Validate by processing Sim_2H_test images and creating PCA visualizations."""
-    student.eval()
-
-    os.makedirs(output_dir, exist_ok=True)
-
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-    ])
-
-    test_images = list(Path(test_dir).glob('*.png')) + list(Path(test_dir).glob('*.jpg'))
-
-    for img_path in test_images:
-        img = Image.open(img_path).convert('RGB')
-        w, h = img.size
-
-        new_w = (w // 16) * 16
-        new_h = (h // 16) * 16
-        img = img.resize((new_w, new_h), Image.BILINEAR)
-
-        img_tensor = transform(img).unsqueeze(0).to(device)
-
-        with torch.no_grad():
-            features = student.encoder.forward_features(img_tensor)
-            patch_features = features['x_norm_patchtokens'].squeeze(0)
-
-        h_grid = new_h // 16
-        w_grid = new_w // 16
-        patch_features_flat = patch_features.view(-1, patch_features.shape[-1]).cpu().numpy()
-
-        pca = PCA(n_components=4)
-        pca_result = pca.fit_transform(patch_features_flat)
-
-        fig, axs = plt.subplots(2, 2, figsize=(10, 10))
-        axs = axs.flatten()
-
-        for i in range(4):
-            component = pca_result[:, i]
-            heatmap = component.reshape(h_grid, w_grid)
-            heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min())
-
-            axs[i].imshow(heatmap, cmap='inferno')
-            axs[i].set_title(f"PCA Component {i+1}")
-            axs[i].axis('off')
-
-        output_path = os.path.join(output_dir, f"pca_{img_path.name}")
-        plt.savefig(output_path, bbox_inches='tight')
-        plt.close()
-
-        logging.info(f"Processed {img_path.name}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EMA Teacher + MIM LoRA Finetuning for DINOv3")

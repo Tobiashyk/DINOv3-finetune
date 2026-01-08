@@ -12,7 +12,7 @@ from peft import PeftModel
 REPO_DIR = '/home/abc/projects/DINOv3/dinov3'
 
 base_weights_path = '/home/abc/projects/DINOv3/dinov3/weight/dinov3_vits16plus_pretrain_lvd1689m-4057cbaa.pth'
-lora_weights_path = '../../dinov3_finetune/student_weights/ori_train/student_encoder_final' 
+lora_weights_path = '../../dinov3_finetune/student_weights/teacher_student_huge_pos/student_encoder_epoch_40'  
 
 # 检查是否有 GPU
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -99,19 +99,19 @@ def process_image(img_path, out_folder):
     plt.close()
 
 # 处理 Sim_1T
-input_dir_1 = Path('../train_pic/Sim_1T_test')
+input_dir_1 = Path('../train_pic/test/Sim_1T_256_test')
 if input_dir_1.exists():
     print(f"\n--- Processing {input_dir_1} ---")
     images = list(input_dir_1.glob('*.png')) + list(input_dir_1.glob('*.jpg'))
     for img_path in sorted(images):
-        process_image(img_path, '../PCA_pic/1T_ori_finetune') # 修改输出文件夹名称以区分
+        process_image(img_path, '../PCA_pic/1T') # 修改输出文件夹名称以区分
 
 # 处理 Sim_2H
-input_dir_2 = Path('../train_pic/Sim_2H_test')
+input_dir_2 = Path('../train_pic/test/Sim_2H_256_test')
 if input_dir_2.exists():
     print(f"\n--- Processing {input_dir_2} ---")
     images = list(input_dir_2.glob('*.png')) + list(input_dir_2.glob('*.jpg'))
     for img_path in sorted(images):
-        process_image(img_path, '../PCA_pic/2H_ori_finetune')
+        process_image(img_path, '../PCA_pic/2H')
 
 print("\nAll Processing complete.")
