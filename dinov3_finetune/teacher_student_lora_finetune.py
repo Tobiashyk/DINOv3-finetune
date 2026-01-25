@@ -67,6 +67,7 @@ class STEMDataset(Dataset):
     def __getitem__(self, idx):
         img_path = self.image_paths[idx]
         img = Image.open(img_path).convert('RGB')
+        
 
         # Global view (full image)
         global_view = img
@@ -191,6 +192,7 @@ def dino_loss(student_cls, teacher_cls, temperature=0.1):
     """DINO loss: Cross-entropy between student and teacher CLS outputs."""
     # student_cls and teacher_cls: [batch_size, out_dim]
 
+    # ===== Original implementation (commented out) =====
     # Compute logits
     # teacher_logits = teacher_cls / (temperature - 0.03)
     # student_logits = student_cls / temperature
@@ -203,13 +205,47 @@ def dino_loss(student_cls, teacher_cls, temperature=0.1):
     teacher_probs = F.softmax((teacher_cls / teacher_temp).detach(), dim=-1)
     loss = torch.sum(-teacher_probs * student_log_probs, dim=-1).mean()
 
+    # ===== New implementation with teacher centering and sharpening =====
+    # student_temp = temperature
+    # teacher_temp = temperature - 0.04  # Slightly lower temperature for sharpening
+
+    # Apply centering: subtract the running average center from teacher output
+    # teacher_centered = teacher_cls - teacher_center
+
+    # Compute probabilities with sharpening (lower temperature)
+    # student_log_probs = F.log_softmax(student_cls / student_temp, dim=-1)
+    # teacher_probs = F.softmax(teacher_centered / teacher_temp, dim=-1)
+
+    # Cross-entropy loss
+    # loss = torch.sum(-teacher_probs * student_log_probs, dim=-1).mean()
+
     return loss
 
-def ibot_loss(student_patches, teacher_patches, temperature=0.1):
+def ibot_loss(student_patches, teacher_patches, mask_patches, temperature=0.1):
     """iBOT loss: Cross-entropy between student and teacher patch tokens."""
     # student_patches: [batch_size, num_patches, emb_dim]
     # teacher_patches: [batch_size, num_patches, emb_dim]
+    # mask_patches: [batch_size, num_patches] - boolean mask indicating which patches are masked
 
+    # ===== Original implementation (commented out) =====
+    # batch_size, num_patches, emb_dim = student_patches.shape
+
+    # # Normalize features
+    # student_norm = F.normalize(student_patches, dim=-1)
+    # teacher_norm = F.normalize(teacher_patches, dim=-1)
+
+    # # Compute similarity matrix: [batch_size, num_patches, num_patches]
+    # sim_matrix = torch.matmul(student_norm, teacher_norm.transpose(-1, -2)) / temperature
+
+    # # Cross-entropy loss: each student patch predicts corresponding teacher patch
+    # labels = torch.arange(num_patches, device=sim_matrix.device).expand(batch_size, -1)
+    # loss = F.cross_entropy(
+    #     sim_matrix.reshape(-1, num_patches),
+    #     labels.reshape(-1),
+    #     reduction='mean'
+    # )
+
+    # ===== New implementation: only compute loss on masked patches =====
     batch_size, num_patches, emb_dim = student_patches.shape
 
     # Normalize features
@@ -219,11 +255,28 @@ def ibot_loss(student_patches, teacher_patches, temperature=0.1):
     # Compute similarity matrix: [batch_size, num_patches, num_patches]
     sim_matrix = torch.matmul(student_norm, teacher_norm.transpose(-1, -2)) / temperature
 
-    # Cross-entropy loss: each student patch predicts corresponding teacher patch
-    labels = torch.arange(num_patches, device=sim_matrix.device).expand(batch_size, -1)
+    # Only compute loss on masked patches
+    # mask_patches: [batch_size, num_patches] where 0 indicates masked patches
+    masked_indices = (mask_patches == 0).nonzero(as_tuple=False)  # [num_masked, 2] (batch_idx, patch_idx)
+
+    if masked_indices.shape[0] == 0:
+        # No masked patches, return zero loss
+        return torch.tensor(0.0, device=student_patches.device, requires_grad=True)
+
+    # Extract logits and labels for masked patches only
+    batch_indices = masked_indices[:, 0]
+    patch_indices = masked_indices[:, 1]
+
+    # Get logits for masked patches: [num_masked, num_patches]
+    masked_logits = sim_matrix[batch_indices, patch_indices, :]
+
+    # Labels are the patch indices themselves (self-alignment)
+    masked_labels = patch_indices
+
+    # Compute cross-entropy loss only on masked patches
     loss = F.cross_entropy(
-        sim_matrix.reshape(-1, num_patches),
-        labels.reshape(-1),
+        masked_logits,
+        masked_labels,
         reduction='mean'
     )
 
@@ -248,11 +301,28 @@ def train_epoch(student, teacher, dataloader, optimizer, device, ema_decay, temp
         # Apply random mask to global view for iBOT
         masked_global_view, mask = apply_mask(global_view, mask_ratio=0.5)
 
+        # Convert mask to patch-level boolean mask
+        # mask: [batch_size, channels, height, width]
+        # We need: [batch_size, num_patches] where 0 = masked, 1 = visible
+        batch_size, channels, height, width = mask.shape
+        patch_size = 16
+        h_patches = height // patch_size
+        w_patches = width // patch_size
+        
+        # Downsample mask to patch level by taking mean over each patch
+        mask_patches = F.avg_pool2d(mask[:, 0:1, :, :], kernel_size=patch_size, stride=patch_size)
+        mask_patches = mask_patches.squeeze(1)  # [batch_size, h_patches, w_patches]
+        mask_patches = mask_patches.reshape(batch_size, -1)  # [batch_size, num_patches]
+
         optimizer.zero_grad()
 
         # Teacher forward pass (using full global view, no mask)
         with torch.no_grad():
             teacher_dino, teacher_mim, teacher_patches = teacher(global_view)
+            
+            # Update teacher center with EMA
+            # batch_center = torch.mean(teacher_dino, dim=0, keepdim=True)
+            # teacher_center = center_momentum * teacher_center + (1 - center_momentum) * batch_center
 
         # Student DINO forward pass (using full local view for CLS token)
         student_dino, _, _ = student(local_view)
@@ -264,7 +334,8 @@ def train_epoch(student, teacher, dataloader, optimizer, device, ema_decay, temp
         loss_dino = dino_loss(student_dino, teacher_dino, temperature)
 
         # Compute iBOT loss (patch token alignment between student and teacher)
-        loss_ibot = ibot_loss(student_mim, teacher_mim, temperature)
+        # Only compute on masked patches
+        loss_ibot = ibot_loss(student_mim, teacher_mim, mask_patches, temperature)
 
         # Combined loss
         loss = loss_dino + loss_ibot
@@ -349,10 +420,15 @@ def main(args):
     # Optimizer (only optimize student parameters)
     optimizer = optim.AdamW(student.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
+    # Initialize teacher center for DINO loss
+    # teacher_center = torch.zeros(1, args.dino_out_dim, device=device)
+
     # Training loop
     for epoch in range(args.epochs):
-        loss, dino_loss, ibot_loss = train_epoch(student, teacher, dataloader, optimizer, device,
-                                      args.ema_decay, args.temperature)
+        loss, dino_loss, ibot_loss = train_epoch(
+            student, teacher, dataloader, optimizer, device,
+            args.ema_decay, args.temperature
+        )
         logging.info(f"Epoch {epoch+1}/{args.epochs}, Loss: {loss:.4f}, DINO: {dino_loss:.4f}, iBOT: {ibot_loss:.4f}")
 
         if (epoch + 1) % args.save_freq == 0:

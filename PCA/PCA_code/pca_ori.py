@@ -72,13 +72,21 @@ def process_image(img_path, out_folder):
     plt.savefig(out_path, bbox_inches='tight')
     plt.close()
 
-# Process Sim_1T
-for img_path in sorted(Path('./Sim_1T_test').glob('*.png')):
-    process_image(img_path, './PCA_1T_ori')
+# 处理 Sim_1T
+input_dir_1 = Path('../train_pic/test/Sim_1T_256_test')
+if input_dir_1.exists():
+    print(f"\n--- Processing {input_dir_1} ---")
+    images = list(input_dir_1.glob('*.png')) + list(input_dir_1.glob('*.jpg'))
+    for img_path in sorted(images):
+        process_image(img_path, '../PCA_pic/1T')
 
-# Process Sim_2H
-for img_path in sorted(Path('./Sim_2H_test').glob('*.png')):
-    process_image(img_path, './PCA_2H_ori')
+# 处理 Sim_2H
+input_dir_2 = Path('../train_pic/test/Sim_2H_256_test')
+if input_dir_2.exists():
+    print(f"\n--- Processing {input_dir_2} ---")
+    images = list(input_dir_2.glob('*.png')) + list(input_dir_2.glob('*.jpg'))
+    for img_path in sorted(images):
+        process_image(img_path, '../PCA_pic/2H')
 
 # for img_path in sorted(Path('./cat').glob('*.png')):
 #     process_image(img_path, './PCA_cat')

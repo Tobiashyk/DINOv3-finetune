@@ -3,23 +3,31 @@ import torchvision.transforms as transforms
 from PIL import Image
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
-import numpy as np
 import os
 from pathlib import Path
+import argparse
+import numpy as np
 
 # === [新增] 导入 PEFT 库用于加载 LoRA ===
 from peft import PeftModel
 
-SCALE_FACTOR = 4
+
 
 # === 1. 设置路径 ===
 REPO_DIR = '/home/abc/projects/DINOv3/dinov3'
 # 原始预训练权重路径 (底座)
+parser = argparse.ArgumentParser(description="PCA Heatmap with LoRA Finetuned DINOv3")
+parser.add_argument("--weight_path", type=str, default="improved_teacher_student")
+parser.add_argument("--num_epochs", type=str, default="40")
+parser.add_argument("--factor", type=int, default=1)
+
+args = parser.parse_args()
 base_weights_path = '/home/abc/projects/DINOv3/dinov3/weight/dinov3_vits16plus_pretrain_lvd1689m-4057cbaa.pth'
+SCALE_FACTOR = args.factor
 
 # [新增] 训练好的 Student LoRA 权重文件夹路径
 # 这里指向你训练脚本保存的 output 目录，例如 'output/student_final'
-lora_weights_path = '../../dinov3_finetune/student_weights/teacher_student_ori_1/student_encoder_epoch_40' 
+lora_weights_path = '../../dinov3_finetune/student_weights/' + args.weight_path + '/student_encoder_epoch_' + args.num_epochs
 
 # 检查是否有 GPU
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -49,99 +57,189 @@ model.to(device)
 model.eval()
 
 # === 3. 定义预处理 ===
-transform = transforms.Compose([
+transform_tensor = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
 ])
 
-def process_image(img_path, out_folder):
-    # 确保输出文件夹存在
+transform_resize = transforms.RandomResizedCrop(
+            size=(1024, 1024),  # Original size,
+            scale=(1.0, 1.0),
+            ratio=(1.0, 1.0),
+            interpolation=transforms.InterpolationMode.BILINEAR
+        )
+
+def process_image_comparison_component3(img_path, out_folder, base_model, finetuned_model):
     os.makedirs(out_folder, exist_ok=True)
     
     img = Image.open(img_path).convert('RGB')
+    img = transform_resize(img)
     W_orig, H_orig = img.size 
-
-    # === [修改点 1] 强制放大图像 (SCALE_FACTOR Upscale) ===
+    
     new_w = (W_orig * SCALE_FACTOR // 16) * 16
     new_h = (H_orig * SCALE_FACTOR // 16) * 16
-    
-    # 使用双三次插值 (BICUBIC) 进行放大
     img_resized = img.resize((new_w, new_h), resample=Image.BICUBIC)
+    img_tensor = transform_tensor(img_resized).unsqueeze(0).to(device)
     
-    # === [修改点 2] 保存放大的图像 ===
-    # upscaled_filename = f"upscaled_{img_path.name}"
-    # upscaled_save_path = os.path.join(out_folder, upscaled_filename)
-    # img_resized.save(upscaled_save_path)
-
-    # 转为 Tensor 并移至 GPU
-    img_tensor = transform(img_resized).unsqueeze(0).to(device)
-
-    # 提取特征
-    with torch.no_grad():
-        # 注意：这里调用的是 model 而不是 dinov3_vits16plus
-        features = model(img_tensor, is_training=True)
-
-    # 获取 Patch Tokens
-    patch_features = features["x_norm_patchtokens"]
-    patch_features = patch_features.squeeze(0)
-
-    # === [修改点 3] Grid 尺寸计算 ===
     h_grid = new_h // 16
     w_grid = new_w // 16
-
-    # Reshape
-    patch_features_flat = patch_features.view(-1, patch_features.shape[-1])
-
-    # 转回 CPU 进行 PCA 计算
-    patch_features_cpu = patch_features_flat.cpu().numpy()
-
-    # === PCA 分析 ===
-    pca = PCA(n_components=1)
-    pca_result = pca.fit_transform(patch_features_cpu)
-
-    # Reshape 回热力图网格
-    heatmap = pca_result.reshape(h_grid, w_grid)
     
-    # [优化] 归一化热力图
-    heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min())
+    # === 提取两个模型的特征 ===
+    with torch.no_grad():
+        # 原始模型
+        base_features = base_model.forward_features(img_tensor)
+        base_patches = base_features["x_norm_patchtokens"].squeeze(0).cpu().numpy()
+        
+        # 微调模型
+        finetuned_features = finetuned_model.forward_features(img_tensor)
+        finetuned_patches = finetuned_features["x_norm_patchtokens"].squeeze(0).cpu().numpy()
+    
+    # === PCA 分析 (原始模型) ===
+    pca_base = PCA(n_components=3)
+    pca_result_base = pca_base.fit_transform(base_patches)
+    heatmap_base = pca_result_base.reshape(h_grid, w_grid, 3)
+    p5, p95 = np.percentile(heatmap_base, [5, 95])
+    heatmap_base = np.clip(heatmap_base, p5, p95)
+    heatmap_base = (heatmap_base - heatmap_base.min()) / (heatmap_base.max() - heatmap_base.min())
+    
+    # === PCA 分析 (微调模型) ===
+    pca_finetuned = PCA(n_components=3)
+    pca_result_finetuned = pca_finetuned.fit_transform(finetuned_patches)
+    heatmap_finetuned = pca_result_finetuned.reshape(h_grid, w_grid, 3)
+    p5, p95 = np.percentile(heatmap_finetuned, [5, 95])
+    heatmap_finetuned = np.clip(heatmap_finetuned, p5, p95)
+    heatmap_finetuned = (heatmap_finetuned - heatmap_finetuned.min()) / (heatmap_finetuned.max() - heatmap_finetuned.min())
+    
+    # === 上采样到原图尺寸 ===
+    def upsample_heatmap(heatmap_rgb):
+        heatmap_tensor = torch.from_numpy(heatmap_rgb).permute(2, 0, 1).unsqueeze(0).float()
+        upsampled = torch.nn.functional.interpolate(
+            heatmap_tensor, 
+            size=(H_orig, W_orig), 
+            mode='bicubic', 
+            align_corners=False
+        )
+        result = upsampled.squeeze().permute(1, 2, 0).numpy()
+        return np.clip(result, 0, 1)  # (H, W, 3)
+    
+    heatmap_base_full = upsample_heatmap(heatmap_base)
+    heatmap_finetuned_full = upsample_heatmap(heatmap_finetuned)
+    
+    # === 三图可视化 ===
+    fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+    
+    axs[0].imshow(img)
+    axs[0].set_title("Original Image")
+    axs[0].axis('off')
+    
+    axs[1].imshow(heatmap_base_full)  # 移除 cmap
+    axs[1].set_title("Base Model PCA")
+    axs[1].axis('off')
+    
+    axs[2].imshow(heatmap_finetuned_full)  # 移除 cmap
+    axs[2].set_title("Finetuned Model PCA")
+    axs[2].axis('off')
+    
+    out_path = os.path.join(out_folder, os.path.basename(img_path))
+    plt.savefig(out_path, bbox_inches='tight', dpi=150)
+    plt.close()
+    
+    print(f"Processed: {img_path.name}")
 
-        # === 还原尺寸 ===
-    heatmap_tensor = torch.from_numpy(heatmap).unsqueeze(0).unsqueeze(0)
-    upsampled = torch.nn.functional.interpolate(
-        heatmap_tensor, 
-        size=(H_orig, W_orig), 
-        mode='bicubic', 
-        align_corners=False
-    )
-    heatmap_full = upsampled.squeeze().numpy()
+def process_image_comparison_component1(img_path, out_folder, base_model, finetuned_model):
+    os.makedirs(out_folder, exist_ok=True)
+    
+    img = Image.open(img_path).convert('RGB')
+    img = transform_resize(img)
+    W_orig, H_orig = img.size 
+    
+    new_w = (W_orig * SCALE_FACTOR // 16) * 16
+    new_h = (H_orig * SCALE_FACTOR // 16) * 16
+    img_resized = img.resize((new_w, new_h), resample=Image.BICUBIC)
+    img_tensor = transform_tensor(img_resized).unsqueeze(0).to(device)
+    
+    h_grid = new_h // 16
+    w_grid = new_w // 16
+    
+    # === 提取两个模型的特征 ===
+    with torch.no_grad():
+        # 原始模型
+        base_features = base_model.forward_features(img_tensor)
+        base_patches = base_features["x_norm_patchtokens"].squeeze(0).cpu().numpy()
+        
+        # 微调模型
+        finetuned_features = finetuned_model.forward_features(img_tensor)
+        finetuned_patches = finetuned_features["x_norm_patchtokens"].squeeze(0).cpu().numpy()
+    
+    # === PCA 分析 (原始模型) ===
+    pca_base = PCA(n_components=1)
+    pca_result_base = pca_base.fit_transform(base_patches)
+    heatmap_base = pca_result_base.reshape(h_grid, w_grid)
+    p5, p95 = np.percentile(heatmap_base, [5, 95])
+    heatmap_base = np.clip(heatmap_base, p5, p95)
+    heatmap_base = (heatmap_base - heatmap_base.min()) / (heatmap_base.max() - heatmap_base.min())
 
-        # === 可视化 ===
-    fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+# === PCA 分析 (微调模型) ===
+    pca_finetuned = PCA(n_components=1)
+    pca_result_finetuned = pca_finetuned.fit_transform(finetuned_patches)
+    heatmap_finetuned = pca_result_finetuned.reshape(h_grid, w_grid)
+    p5, p95 = np.percentile(heatmap_finetuned, [5, 95])
+    heatmap_finetuned = np.clip(heatmap_finetuned, p5, p95)
+    heatmap_finetuned = (heatmap_finetuned - heatmap_finetuned.min()) / (heatmap_finetuned.max() - heatmap_finetuned.min())
+    
+    # === 上采样到原图尺寸 ===
+    def upsample_heatmap(heatmap_gray):
+        heatmap_tensor = torch.from_numpy(heatmap_gray).unsqueeze(0).unsqueeze(0).float()  # ✅ [1,1,H,W]
+        upsampled = torch.nn.functional.interpolate(
+            heatmap_tensor, 
+            size=(H_orig, W_orig), 
+            mode='bicubic', 
+            align_corners=False
+        )
+        result = upsampled.squeeze().numpy()
+        return np.clip(result, 0, 1)
+    
+    heatmap_base_full = upsample_heatmap(heatmap_base)
+    heatmap_finetuned_full = upsample_heatmap(heatmap_finetuned)
+    
+    # === 三图可视化 ===
+    fig, axs = plt.subplots(1, 3, figsize=(18, 6))
 
     axs[0].imshow(img)
     axs[0].set_title("Original Image")
     axs[0].axis('off')
 
-    axs[1].imshow(heatmap_full, cmap='inferno') 
-    axs[1].set_title("PCA Heatmap")
+    axs[1].imshow(heatmap_base_full, cmap='inferno')
+    axs[1].set_title("Base Model PCA")
     axs[1].axis('off')
 
-    # 保存对比图
+    axs[2].imshow(heatmap_finetuned_full, cmap='inferno')
+    axs[2].set_title("Finetuned Model PCA")
+    axs[2].axis('off')
+    
     out_path = os.path.join(out_folder, os.path.basename(img_path))
-    plt.savefig(out_path, bbox_inches='tight')
+    plt.savefig(out_path, bbox_inches='tight', dpi=150)
     plt.close()
     
     print(f"Processed: {img_path.name}")
+# === 修改主循环 ===
+# 重新加载独立的原始模型（不带 LoRA）
+print("Loading separate base model for comparison...")
+base_model_copy = torch.hub.load(REPO_DIR, 'dinov3_vits16plus', source='local', weights=base_weights_path)
+base_model_copy.to(device)
+base_model_copy.eval()
+
+finetuned_model = model  # 微调后的模型（带 LoRA）
 
 # === 4. 执行循环 ===
 
 # 处理 Sim_1T
-input_dir_1 = Path('../train_pic/test/Sim_1T_256_test')
-if input_dir_1.exists():
-    print(f"\n--- Processing {input_dir_1} ---")
-    images = list(input_dir_1.glob('*.png')) + list(input_dir_1.glob('*.jpg'))
-    for img_path in sorted(images):
-        process_image(img_path, '../PCA_pic/1T') # 修改输出文件夹名称以区分
+# input_dir_1 = Path('../train_pic/test/Sim_1T_256_test')
+# if input_dir_1.exists():
+#     print(f"\n--- Processing {input_dir_1} ---")
+#     images = list(input_dir_1.glob('*.png')) + list(input_dir_1.glob('*.jpg'))
+#     for img_path in sorted(images):
+#         process_image_comparison_component1(img_path, '../PCA_pic/1T', base_model_copy, finetuned_model)
 
 # 处理 Sim_2H
 input_dir_2 = Path('../train_pic/test/Sim_2H_256_test')
@@ -149,6 +247,13 @@ if input_dir_2.exists():
     print(f"\n--- Processing {input_dir_2} ---")
     images = list(input_dir_2.glob('*.png')) + list(input_dir_2.glob('*.jpg'))
     for img_path in sorted(images):
-        process_image(img_path, '../PCA_pic/2H')
+        process_image_comparison_component1(img_path, '../PCA_pic/2H', base_model_copy, finetuned_model)
+
+# input_dir_1 = Path('../train_pic/test/lpy_1024')
+# if input_dir_1.exists():
+#     print(f"\n--- Processing {input_dir_1} ---")
+#     images = list(input_dir_1.glob('*.png')) + list(input_dir_1.glob('*.jpg'))
+#     for img_path in sorted(images):
+#         process_image_comparison_component3(img_path, '../PCA_pic/lpy_1024', base_model_copy, finetuned_model)
 
 print("\nAll Processing complete.")

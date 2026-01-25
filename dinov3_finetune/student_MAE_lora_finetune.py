@@ -200,15 +200,20 @@ def main(args):
     logging.info(f"Using device: {device}")
 
     # Data preprocessing
+    # transform = transforms.Compose([
+    #     transforms.ToTensor(),
+    #     transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+    # ])
     transform = transforms.Compose([
+        transforms.Resize((1024, 1024)),
         transforms.ToTensor(),
         transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
     ])
-
+    
     augmentation = MIMAugmentation(scale=(0.05, 0.3))
 
     # Dataset
-    train_dirs = ['../PCA/train_pic/Sim_1T', '../PCA/train_pic/Sim_2H','../PCA/train_pic/Sim_pos_1T','../PCA/train_pic/Sim_pos_2H']
+    train_dirs = ['../lpy/train']
     dataset = STEMDataset(train_dirs, transform=transform, augmentation=augmentation)
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
@@ -243,12 +248,12 @@ def main(args):
         logging.info(f"Epoch {epoch+1}/{args.epochs}, Loss: {loss:.4f}")
 
         if (epoch + 1) % args.save_freq == 0:
-            student.encoder.save_pretrained(f"student_weights/student_encoder_epoch_{epoch+1}")
-            torch.save(decoder.state_dict(), f"student_weights/decoder_epoch_{epoch+1}.pth")
+            student.encoder.save_pretrained(f"student_weights/MAE_lpy/student_encoder_epoch_{epoch+1}")
+            torch.save(decoder.state_dict(), f"student_weights/MAE_lpy/decoder_epoch_{epoch+1}.pth")
 
     # Final save
-    student.encoder.save_pretrained("student_weights/student_encoder_final")
-    torch.save(decoder.state_dict(), "student_weights/decoder_final.pth")
+    # student.encoder.save_pretrained("student_weights/student_encoder_final")
+    # torch.save(decoder.state_dict(), "student_weights/decoder_final.pth")
 
 
 if __name__ == "__main__":
@@ -262,7 +267,7 @@ if __name__ == "__main__":
     parser.add_argument("--lora_alpha", type=int, default=32)  # Higher LoRA alpha
     parser.add_argument("--lora_dropout", type=float, default=0.05)  # Lower dropout
     parser.add_argument("--ema_decay", type=float, default=0.99)  # Faster teacher update
-    parser.add_argument("--save_freq", type=int, default=20)  # Save less frequently
+    parser.add_argument("--save_freq", type=int, default=10)  # Save less frequently
 
     args = parser.parse_args()
     main(args)
