@@ -1,0 +1,5 @@
+defaults:
+  - model: dinov3_vits16
+  - loss: dino
+  - data: test_dataset
+  - _self_

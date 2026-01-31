@@ -1,0 +1,19 @@
+backbone:
+  _target_: torch.hub.load
+  repo_or_dir: dinov3
+  # repo_or_dir: https://github.com/facebookresearch/dinov3
+  model: dinov3_vits16
+  source: local
+  weights: weights/dinov3_vits16_pretrain.pth
+
+head:
+  _target_: src.model.head.DINOHead
+  in_dim: 384
+  out_dim: 65536
+  use_bn: true
+  nlayers: 3
+  hidden_dim: 2048
+  bottleneck_dim: 256
+  mlp_bias: true
+
+patch_size: 16
