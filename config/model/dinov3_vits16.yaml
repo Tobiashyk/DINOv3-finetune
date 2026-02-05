@@ -17,3 +17,5 @@ head:
   mlp_bias: true
 
 patch_size: 16
+image_w: 224
+image_h: 224

@@ -3,3 +3,8 @@ defaults:
   - loss: dino
   - data: test_dataset
   - _self_
+
+
+train:
+  epochs: 10
+  lr: 1e-3

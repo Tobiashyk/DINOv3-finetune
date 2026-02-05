@@ -90,13 +90,18 @@ class DINOLoss(nn.Module):
         Returns:
             Scalar loss value
         """
+        S, B, K = student_probs.shape
+        T, _, _ = teacher_probs.shape
+
+
         # Apply temperature-scaled log_softmax to student network logits
         student_log_probs = F.log_softmax(student_probs / self.student_temp, dim=-1)
 
         # Calculate cross-entropy loss: -sum(teacher_probs * log(student_probs))
-        loss = -torch.sum(teacher_probs * student_log_probs, dim=-1)
+        # loss = -torch.sum(teacher_probs * student_log_probs, dim=-1)
+        loss = -torch.einsum("s b k, t b k -> ", student_log_probs, teacher_probs)
 
-        return loss.mean()
+        return loss / (B * S * T)
 
     @torch.no_grad()
     def update_center(self, teacher_output: torch.Tensor):

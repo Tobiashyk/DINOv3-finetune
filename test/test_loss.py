@@ -1,9 +1,8 @@
 import torch
 import random
 import numpy as np
-from src.utils.image_process import make_transform
-from src.data.test_datamodule import load_images
 from src.model.ssl import TeacherSSLModel, StudentSSLModel
+from src.model.data import gen_dataloader
 
 import hydra
 from hydra.utils import instantiate
@@ -49,25 +48,30 @@ def main(cfg: DictConfig):
 
     optimizer = torch.optim.AdamW(
         student.parameters(),
-        lr=1e-3
+        lr=cfg.train.lr
     )
+    epochs = cfg.train.epochs
 
-    images = load_images(data_cfg.path)
-    transform = make_transform(data_cfg.image_w, data_cfg.image_h)
+    dataloader = gen_dataloader(data_cfg)
+    
+    for _ in range(epochs):
+        for images in dataloader:
+            images = [img.to('cuda') for img in images]
+            global_imgs = torch.vstack(images[:2])
+            local_imgs = torch.vstack(images[2:])
 
-    images_transformed = [transform(img) for img in images]
-    images_transformed = torch.stack(images_transformed).to('cuda')
+            with torch.no_grad():
+                teacher_probs = teacher(global_imgs)
+            student_probs = student(local_imgs)
 
-    for _ in range(10):
-        with torch.no_grad():
-            teacher_probs = teacher(images_transformed)
-        student_probs = student(images_transformed)
+            teacher_probs = teacher_probs.view(2, -1, teacher_probs.size(-1))
+            student_probs = student_probs.view(8, -1, student_probs.size(-1))
 
-        optimizer.zero_grad()
-        dino_loss = loss(student_probs, teacher_probs)
-        print("DINO loss:", dino_loss.item())
-        dino_loss.backward()
-        optimizer.step()
+            optimizer.zero_grad()
+            dino_loss = loss(student_probs, teacher_probs)
+            print("DINO loss:", dino_loss.item())
+            dino_loss.backward()
+            optimizer.step()
 
 
 if __name__ == "__main__":

@@ -1,7 +1,0 @@
-model:
-  _target_: torch.hub.load
-  repo_or_dir: dinov3
-  model: dinov3_vits16
-  source: local
-  weights: weights/dinov3_vits16_pretrain.pth
-loss: {}
