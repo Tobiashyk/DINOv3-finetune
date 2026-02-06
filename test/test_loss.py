@@ -27,6 +27,9 @@ def main(cfg: DictConfig):
     model_cfg = cfg.model
     data_cfg = cfg.data
 
+    dino_head_dim = model_cfg.dino_head.out_dim
+    ibot_head_dim = model_cfg.ibot_head.out_dim
+
     backbone = instantiate(model_cfg.backbone).to("cuda")
     dino_head = instantiate(model_cfg.dino_head).to("cuda")
     ibot_head = instantiate(model_cfg.ibot_head).to("cuda")
@@ -78,12 +81,12 @@ def main(cfg: DictConfig):
 
             optimizer.zero_grad()
             global_dino_loss_value = dino_loss(
-                global_dino_student.view(2, -1, global_dino_student.size(-1)),
-                global_dino_teacher.view(2, -1, global_dino_teacher.size(-1)),
+                global_dino_student.view(2, -1, dino_head_dim),
+                global_dino_teacher.view(2, -1, dino_head_dim),
             )
             local_dino_loss_value = dino_loss(
-                local_dino_student.view(8, -1, local_dino_student.size(-1)),
-                global_dino_teacher.view(2, -1, global_dino_teacher.size(-1)),
+                local_dino_student.view(8, -1, dino_head_dim),
+                global_dino_teacher.view(2, -1, dino_head_dim),
             )
 
             koleo_loss_value = koleo_loss(
@@ -93,8 +96,8 @@ def main(cfg: DictConfig):
             mask = torch.rand(2 * num_batch, 196).to("cuda") < 0.4
 
             ibot_loss_value = ibot_loss(
-                global_ibot_student.view(2 * 4, -1, global_ibot_student.size(-1)),
-                global_ibot_teacher.view(2 * 4, -1, global_ibot_teacher.size(-1)),
+                global_ibot_student.view(2 * num_batch, -1, ibot_head_dim),
+                global_ibot_teacher.view(2 * num_batch, -1, ibot_head_dim),
                 mask,
             )
             print("Global DINO loss:", global_dino_loss_value.item())
