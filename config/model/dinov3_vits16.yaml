@@ -6,7 +6,17 @@ backbone:
   source: local
   weights: weights/dinov3_vits16_pretrain.pth
 
-head:
+dino_head:
+  _target_: src.model.head.DINOHead
+  in_dim: 384
+  out_dim: 65536
+  use_bn: true
+  nlayers: 3
+  hidden_dim: 2048
+  bottleneck_dim: 256
+  mlp_bias: true
+
+ibot_head:
   _target_: src.model.head.DINOHead
   in_dim: 384
   out_dim: 65536

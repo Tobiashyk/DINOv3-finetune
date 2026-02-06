@@ -1,4 +1,0 @@
-_target_: src.model.loss.DINOLoss
-out_dim: 65536
-student_temp: 0.1
-center_momentum: 0.9

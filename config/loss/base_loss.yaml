@@ -1,0 +1,17 @@
+dino_loss:
+  _target_: src.loss.dino_clstoken_loss.DINOLoss
+  out_dim: 65536
+  student_temp: 0.1
+  center_momentum: 0.9
+
+koleo_loss:
+  _target_: src.loss.koleo_loss.KoLeoLoss
+
+ibot_loss:
+  _target_: src.loss.ibot_patch_loss.iBOTPatchLoss
+  patch_out_dim: 65536
+  student_temp: 0.1
+  center_momentum: 0.9
+
+gram_loss:
+  _target_: src.loss.gram_loss.GramLoss
