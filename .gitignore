@@ -1,3 +1,7 @@
-/output
-/logs
-/checkpoints
+.claude
+.venv/
+outputs/
+logs/
+reference/
+
+__pycache__/
