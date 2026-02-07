@@ -37,7 +37,6 @@ def main(cfg: DictConfig):
     ibot_head = instantiate(model_cfg.ibot_head).to("cuda")
 
     dino_loss = instantiate(cfg.loss.dino_loss).to("cuda")
-    koleo_loss = instantiate(cfg.loss.koleo_loss).to("cuda")
     ibot_loss = instantiate(cfg.loss.ibot_loss).to("cuda")
 
     student = StudentSSLModel(
@@ -80,7 +79,6 @@ def main(cfg: DictConfig):
             print(student_output['local_ibot_output'].shape)
             print(student_output['masks'].shape)
 
-0
             optimizer.zero_grad()
             global_dino_loss_value = dino_loss(
                 student_output['global_dino_output'].view(2, -1, dino_head_dim),
@@ -91,25 +89,15 @@ def main(cfg: DictConfig):
                 teacher_output['local_dino_output'].view(8, -1, dino_head_dim),
             )
 
-            koleo_loss_value = koleo_loss(
-                student_output['global_cls_features'].view(-1, student_output['global_cls_features'].size(-1))
-            )
-
-            
             ibot_loss_value = ibot_loss(
                 student_output['global_ibot_output'].view(2 * num_batch, -1, ibot_head_dim),
                 teacher_output['global_ibot_output'].view(2 * num_batch, -1, ibot_head_dim),
                 ibot_mask,
             )
-            # print("Global DINO loss:", global_dino_loss_value.item())
-            # print("Local DINO loss:", local_dino_loss_value.item())
-            # print("KoLeo loss:", koleo_loss_value.item())
-            # print("iBOT loss:", ibot_loss_value.item())
 
             loss = (
                 global_dino_loss_value
                 + local_dino_loss_value
-                + koleo_loss_value
                 + ibot_loss_value
             )
             print("Loss:", loss.item())

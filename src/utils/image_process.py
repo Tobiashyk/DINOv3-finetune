@@ -1,5 +1,7 @@
 import torch
 from torchvision.transforms import v2
+from PIL import Image
+import os
 
 IMAGENET_DEFAULT_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_DEFAULT_STD = (0.229, 0.224, 0.225)
@@ -108,3 +110,20 @@ def local_transform(
     transform = v2.Compose([geo_augmentation, color_jittering, gaussian_blur, normalization])
 
     return [transform] * num_local_crops
+
+
+def load_images(image_dir: str):
+    """Loads images from a directory. All images are converted to RGB (3 channels)."""
+    return [
+        Image.open(os.path.join(image_dir, f)).convert("RGB")
+        for f in os.listdir(image_dir)
+    ]
+
+
+def resize_image_transform(image_size: tuple[int, int]):
+    """Resizes an image to a given size."""
+    return v2.Compose([
+        v2.Resize(image_size),
+        v2.ToImage(),
+        v2.ToDtype(torch.float32, scale=True),
+    ])
