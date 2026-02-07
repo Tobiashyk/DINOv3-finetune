@@ -30,6 +30,8 @@ def main(cfg: DictConfig):
     dino_head_dim = model_cfg.dino_head.out_dim
     ibot_head_dim = model_cfg.ibot_head.out_dim
 
+    num_batch = data_cfg.batch_size
+
     backbone = instantiate(model_cfg.backbone).to("cuda")
     dino_head = instantiate(model_cfg.dino_head).to("cuda")
     ibot_head = instantiate(model_cfg.ibot_head).to("cuda")
@@ -58,52 +60,51 @@ def main(cfg: DictConfig):
 
     for _ in range(epochs):
         for images in dataloader:
-
             images = [img.to("cuda") for img in images]
-            num_batch = images[0].size(0)
 
             global_imgs = torch.vstack(images[:2])
             local_imgs = torch.vstack(images[2:])
 
-            with torch.no_grad():
-                global_cls_teacher, global_dino_teacher, global_ibot_teacher = teacher(
-                    global_imgs
-                )
-                local_cls_teacher, local_dino_teacher, local_ibot_teacher = teacher(
-                    local_imgs
-                )
-            global_cls_student, global_dino_student, global_ibot_student = student(
-                global_imgs
-            )
-            local_cls_student, local_dino_student, local_ibot_student = student(
-                local_imgs
-            )
 
+            ibot_mask = torch.rand(2 * num_batch, 196).to("cuda") < 0.4
+            teacher_output = teacher(
+                [global_imgs, local_imgs], masks=[None, None])
+            student_output = student(
+                [global_imgs, local_imgs], masks=[ibot_mask, None])
+
+            print(student_output['global_cls_features'].shape)
+            print(student_output['global_dino_output'].shape)
+            print(student_output['global_ibot_output'].shape)
+            print(student_output['local_cls_features'].shape)
+            print(student_output['local_dino_output'].shape)
+            print(student_output['local_ibot_output'].shape)
+            print(student_output['masks'].shape)
+
+0
             optimizer.zero_grad()
             global_dino_loss_value = dino_loss(
-                global_dino_student.view(2, -1, dino_head_dim),
-                global_dino_teacher.view(2, -1, dino_head_dim),
+                student_output['global_dino_output'].view(2, -1, dino_head_dim),
+                teacher_output['global_dino_output'].view(2, -1, dino_head_dim),
             )
             local_dino_loss_value = dino_loss(
-                local_dino_student.view(8, -1, dino_head_dim),
-                global_dino_teacher.view(2, -1, dino_head_dim),
+                student_output['local_dino_output'].view(8, -1, dino_head_dim),
+                teacher_output['local_dino_output'].view(8, -1, dino_head_dim),
             )
 
             koleo_loss_value = koleo_loss(
-                global_cls_student.view(-1, global_cls_student.size(-1))
+                student_output['global_cls_features'].view(-1, student_output['global_cls_features'].size(-1))
             )
 
-            mask = torch.rand(2 * num_batch, 196).to("cuda") < 0.4
-
+            
             ibot_loss_value = ibot_loss(
-                global_ibot_student.view(2 * num_batch, -1, ibot_head_dim),
-                global_ibot_teacher.view(2 * num_batch, -1, ibot_head_dim),
-                mask,
+                student_output['global_ibot_output'].view(2 * num_batch, -1, ibot_head_dim),
+                teacher_output['global_ibot_output'].view(2 * num_batch, -1, ibot_head_dim),
+                ibot_mask,
             )
-            print("Global DINO loss:", global_dino_loss_value.item())
-            print("Local DINO loss:", local_dino_loss_value.item())
-            print("KoLeo loss:", koleo_loss_value.item())
-            print("iBOT loss:", ibot_loss_value.item())
+            # print("Global DINO loss:", global_dino_loss_value.item())
+            # print("Local DINO loss:", local_dino_loss_value.item())
+            # print("KoLeo loss:", koleo_loss_value.item())
+            # print("iBOT loss:", ibot_loss_value.item())
 
             loss = (
                 global_dino_loss_value
@@ -111,10 +112,11 @@ def main(cfg: DictConfig):
                 + koleo_loss_value
                 + ibot_loss_value
             )
+            print("Loss:", loss.item())
             loss.backward()
             optimizer.step()
-            # break
-        # break
+            break
+        break
 
 
 if __name__ == "__main__":

@@ -1,8 +1,6 @@
-import math
-
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-from torch import nn
 
 
 def lossfunc(t, s, temp):  # noqa: F811
@@ -19,9 +17,13 @@ class SinkhornKnoppTeacher(nn.Module):
     """
 
     @torch.no_grad()
-    def forward(self, teacher_output, teacher_temp, n_masked_patches_tensor, n_iterations=3):
+    def forward(
+        self, teacher_output, teacher_temp, n_masked_patches_tensor, n_iterations=3
+    ):
         teacher_output = teacher_output.float()
-        Q = torch.exp(teacher_output / teacher_temp).t()  # Q is K-by-B for consistency with notations from our paper
+        Q = torch.exp(
+            teacher_output / teacher_temp
+        ).t()  # Q is K-by-B for consistency with notations from our paper
         B = n_masked_patches_tensor
         K = Q.shape[0]  # how many prototypes
 
@@ -47,13 +49,8 @@ class iBOTPatchLoss(nn.Module):
     def __init__(self, patch_out_dim, student_temp=0.1, center_momentum=0.9):
         super().__init__()
         self.student_temp = student_temp
-        self.center_momentum = center_momentum
-        self.register_buffer("center", torch.full((1, 1, patch_out_dim), math.nan))
         self.sinkhorn_knopp_teacher = SinkhornKnoppTeacher()
         self.sinkhorn_knopp_teacher.compile()
-
-    def init_weights(self) -> None:
-        self.center.zero_()
 
     @torch.no_grad()
     def softmax_center_teacher(self, teacher_patch_tokens, teacher_temp):
@@ -69,7 +66,9 @@ class iBOTPatchLoss(nn.Module):
         t = teacher_patch_tokens
         s = student_patch_tokens
         loss = lossfunc(t, s, self.student_temp)
-        loss = torch.sum(loss * student_masks_flat.float(), dim=-1) / student_masks_flat.sum(dim=-1).clamp(min=1.0)
+        loss = torch.sum(
+            loss * student_masks_flat.float(), dim=-1
+        ) / student_masks_flat.sum(dim=-1).clamp(min=1.0)
         return -loss.mean()
 
     def forward_masked(
@@ -94,12 +93,3 @@ class iBOTPatchLoss(nn.Module):
             loss = loss[:n_masked_patches]
         loss = loss * masks_weight
         return -loss.sum() / student_masks_flat.shape[0]
-
-    @torch.no_grad()
-    def update_center(self, teacher_patch_tokens):
-        """
-        Update the center used for teacher output normalization.
-        teacher_patch_tokens: (B, N, D) tensor
-        """
-        batch_center = torch.mean(teacher_patch_tokens.mean(1), dim=0, keepdim=True)
-        self.center = self.center * self.center_momentum + batch_center * (1 - self.center_momentum)

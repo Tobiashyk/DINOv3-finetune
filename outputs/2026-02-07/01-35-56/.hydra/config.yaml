@@ -1,0 +1,64 @@
+model:
+  backbone:
+    _target_: torch.hub.load
+    repo_or_dir: dinov3
+    model: dinov3_vits16
+    source: local
+    weights: weights/dinov3_vits16_pretrain.pth
+  dino_head:
+    _target_: src.model.head.DINOHead
+    in_dim: 384
+    out_dim: 65536
+    use_bn: true
+    nlayers: 3
+    hidden_dim: 2048
+    bottleneck_dim: 256
+    mlp_bias: true
+  ibot_head:
+    _target_: src.model.head.DINOHead
+    in_dim: 384
+    out_dim: 65536
+    use_bn: true
+    nlayers: 3
+    hidden_dim: 2048
+    bottleneck_dim: 256
+    mlp_bias: true
+  patch_size: 16
+  image_w: 224
+  image_h: 224
+loss:
+  dino_loss:
+    _target_: src.loss.dino_clstoken_loss.DINOLoss
+    out_dim: 65536
+    student_temp: 0.1
+  koleo_loss:
+    _target_: src.loss.koleo_loss.KoLeoLoss
+  ibot_loss:
+    _target_: src.loss.ibot_patch_loss.iBOTPatchLoss
+    patch_out_dim: 65536
+    student_temp: 0.1
+  gram_loss:
+    _target_: src.loss.gram_loss.GramLoss
+data:
+  data_path: data/koala_test
+  image_w: 1024
+  image_h: 1024
+  batch_size: 4
+  num_workers: 4
+  global_crop_size:
+  - 224
+  - 224
+  global_crop_scale:
+  - 0.32
+  - 1.0
+  local_crop_size:
+  - 96
+  - 96
+  local_crop_scale:
+  - 0.05
+  - 0.32
+  num_local_crops: 8
+  horizontal_flips: true
+train:
+  epochs: 10
+  lr: 0.001
