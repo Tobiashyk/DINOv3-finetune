@@ -27,30 +27,35 @@ The project requires Python >=3.12 and uses PyTorch with CUDA 12.8 support.
 ### Testing
 
 ```bash
-# Test core DINO components (loss, head, model)
-python test_mini_dino.py
-
-# Test specific components
+# Test Sinkhorn-Knopp + EMA (basic functionality)
 python test/test_loss.py
-python test/test_pca.py
 
-# Run example demonstrations
-python examples_mini_dino.py
+# Test EMA teacher update (detailed demonstration)
+python test/test_ema_update.py
+
+# Visualize EMA dynamics (generates plots)
+python test/visualize_ema.py
+
+# Test PCA visualization
+python test/test_pca.py
 ```
 
 ### Training
 
 ```bash
-# Train Mini-DINO model with custom dataset
-python -m src.model.train_mini_dino \
-    --data_dir /path/to/images \
-    --output_dir outputs/mini_dino \
-    --epochs 10 \
-    --batch_size 8 \
-    --lr 0.001
+# Complete training with all features
+python train_complete.py
 
-# Available backbone options: dinov3_vits14, dinov3_vitb14, dinov3_vitl14
-# Adjust --out_dim for number of prototypes (default: 8192)
+# Custom configuration
+python train_complete.py \
+    data.data_path=/path/to/images \
+    train.epochs=100 \
+    train.lr=0.001 \
+    output_dir=outputs/my_experiment
+
+# Resume from checkpoint
+python train_complete.py \
+    resume_from=outputs/dinov3_training/checkpoint_latest.pth
 ```
 
 ### Configuration
@@ -134,18 +139,31 @@ reference/           # Reference implementations and experiments
 
 ### Key Components
 
-#### 1. MiniDINO Model ([src/model/ssl_ref.py](src/model/ssl_ref.py))
+#### 1. Student-Teacher Models ([src/model/ssl.py](src/model/ssl.py))
 
-The core self-distillation model with student-teacher architecture:
+The modular student-teacher architecture with Sinkhorn-Knopp centering and EMA updates:
 
+**StudentSSLModel**:
 - **Student network**: Trained with gradients, learns from teacher
-- **Teacher network**: EMA of student, provides stable targets (no gradients)
-- **DINOHead**: 3-layer MLP projection head (in_dim → hidden_dim → bottleneck_dim → out_dim)
+- Processes both global and local crops through backbone
+- Applies DINO and iBOT heads to extract features
+- Returns CLS tokens and patch tokens for loss computation
+
+**TeacherSSLModel**:
+- **Teacher network**: Updated via EMA, provides stable targets (no gradients)
+- Includes built-in Sinkhorn-Knopp centering module
+- Automatically applies centering to all outputs
+- **EMA update method**: `teacher.update_from_student_ema(student, momentum=0.996)`
 
 Key methods:
-- `forward()`: Computes student/teacher outputs and DINO loss
-- `update_teacher(momentum=0.996)`: EMA update of teacher parameters
-- `get_student_parameters()`: Returns only student parameters for optimization
+- `StudentSSLModel.forward()`: Computes student outputs for all crops
+- `TeacherSSLModel.forward()`: Computes teacher outputs with Sinkhorn-Knopp centering
+- `TeacherSSLModel.update_from_student_ema()`: Updates teacher parameters via EMA
+
+**SinkhornKnoppCentering**:
+- Standalone module for teacher output normalization
+- Prevents mode collapse by ensuring uniform prototype usage
+- Can be compiled with `torch.compile()` for performance
 
 #### 2. Loss Functions
 
@@ -262,7 +280,9 @@ Backbone outputs:
 5. **Backward pass**: Only student parameters receive gradients
 
 6. **Teacher update**: EMA update with momentum 0.996
-   - `teacher = 0.996 * teacher + 0.004 * student`
+   ```python
+   teacher.update_from_student_ema(student, momentum=0.996)
+   ```
 
 7. **Center update**: Update running center for next iteration
    - `center = 0.9 * center + 0.1 * batch_mean`
@@ -273,8 +293,33 @@ Backbone outputs:
 
 - Teacher is initialized as a copy of student
 - Teacher parameters are frozen (no gradients)
-- Teacher is updated via EMA: `teacher = 0.996 * teacher + 0.004 * student`
+- Teacher is updated via EMA using the built-in method:
+  ```python
+  teacher.update_from_student_ema(student, momentum=0.996)
+  ```
 - This provides stable, slowly-evolving targets for the student
+
+#### EMA Teacher Update
+
+The teacher network is updated using Exponential Moving Average (EMA) of student parameters:
+
+**Formula**: `teacher_param = momentum * teacher_param + (1 - momentum) * student_param`
+
+**Usage**:
+```python
+# Standard usage (momentum=0.996)
+teacher.update_from_student_ema(student)
+
+# Custom momentum
+teacher.update_from_student_ema(student, momentum=0.999)
+```
+
+**Key parameters**:
+- `momentum = 0.996` (standard): Effective window ~250 steps
+- `momentum = 0.99` (faster): Effective window ~100 steps
+- `momentum = 0.999` (slower): Effective window ~1000 steps
+
+**Implementation location**: [src/model/ssl.py:84-101](src/model/ssl.py#L84-L101)
 
 #### Sinkhorn-Knopp Algorithm
 
