@@ -1,0 +1,21 @@
+defaults:
+  - model: dinov3_vits16
+  - loss: base_loss
+  - data: test_dataset
+  - _self_
+
+
+train:
+  epochs: 40
+  lr: 5e-4
+  weight_decay: 1e-4
+  lora_r: 8
+  lora_alpha: 16
+  lora_dropout: 0.05
+  mask_ratio: 0.5
+  temperature: 0.1
+  teacher_temp: 0.04  # Sinkhorn-Knopp 温度参数，DINO 默认 0.04
+  ema_decay: 0.996
+  save_interval: 10
+  save_path: "weights_1024_test"
+  koleo_weight: 0.1

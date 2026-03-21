@@ -1,0 +1,26 @@
+defaults:
+  - model: dinov3_vits16
+  - data: stage2_paired_dataset
+  - _self_
+
+# 训练配置
+train:
+  seed: 42
+  epochs: 40
+  lr: 5e-4
+  weight_decay: 1e-4
+
+  # 第一阶段LoRA权重路径（必须指定）
+  lora_weights_path: "student_weights/improved_teacher_student_seed/student_encoder_epoch_40"
+
+  # Mask和温度参数
+  mask_ratio: 0.5      # 随机掩码比例（与iBOT一致）
+  temperature: 0.1     # 温度参数
+
+  save_interval: 10
+  save_path: "stage2_denoising_distillation"
+
+# Hydra输出配置
+hydra:
+  run:
+    dir: ./outputs/stage2/${now:%Y-%m-%d}/${now:%H-%M-%S}

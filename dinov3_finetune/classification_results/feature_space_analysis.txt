@@ -1,0 +1,13 @@
+============================================================
+cls_token Feature Space Analysis
+============================================================
+
+1T class intra-distance:     5.1604
+2H class intra-distance:     3.8046
+Inter-class distance:        6.7654
+Separation ratio:            1.5093
+
+Interpretation:
+- Separation ratio > 2: Excellent separation
+- Separation ratio > 1: Good separation (inter-class > intra-class)
+- Separation ratio < 1: Poor separation

@@ -1,0 +1,22 @@
+# 第二阶段配对数据集配置（多文件夹版本）
+# 干净图和加噪图必须严格一一对应（文件名相同）
+
+# 多个干净图文件夹路径列表
+clean_dirs:
+  - data/train_pic/train_try/graphene_stem_dataset_AA/images_clean
+  - data/train_pic/train_try/graphene_stem_dataset_AB/images_clean
+  - data/train_pic/train_try/MoS2_stem_dataset_1T/images_clean
+  - data/train_pic/train_try/MoS2_stem_dataset_2H/images_clean
+
+# 对应的加噪图文件夹路径列表（顺序必须一一对应）
+noisy_dirs:
+  - data/train_pic/train_try/graphene_stem_dataset_AA/images_noisy
+  - data/train_pic/train_try/graphene_stem_dataset_AB/images_noisy
+  - data/train_pic/train_try/MoS2_stem_dataset_1T/images_noisy
+  - data/train_pic/train_try/MoS2_stem_dataset_2H/images_noisy
+
+# 批次大小
+batch_size: 4
+
+# 图像尺寸（固定1024x1024）
+image_size: 1024

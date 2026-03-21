@@ -1,0 +1,11 @@
+.claude
+.venv/
+outputs/
+logs/
+reference/
+
+**/__pycache__/
+**/__pycache__/**
+weights/
+*.pth
+*.onnx

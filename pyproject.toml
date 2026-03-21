@@ -1,0 +1,29 @@
+[project]
+name = "dinov3-finetune"
+version = "0.1.0"
+description = "DINOv3 Fine-tuning Project"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "torchaudio>=2.0.0",
+    "torchmetrics>=1.8.2",
+    "termcolor>=3.3.0",
+    "omegaconf>=2.3.0",
+    "lightning>=2.6.0",
+    "scikit-learn>=1.8.0",
+    "matplotlib>=3.10.8",
+    "hydra-core>=1.3.2",
+]
+
+# 浙大镜像源（默认，用于常规包）
+[[tool.uv.index]]
+url = "https://mirrors.zju.edu.cn/pypi/web/simple"
+default = true
+
+# PyTorch CUDA 12.8 索引源（仅用于 torch 相关包）
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

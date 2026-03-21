@@ -1,0 +1,324 @@
+============================================================
+DINOv3 Classification Results
+============================================================
+
+Accuracy: 1.0000
+
+Confusion Matrix:
+[[30, 0], [0, 30]]
+
+Classification Report:
+              precision    recall  f1-score   support
+
+          1T       1.00      1.00      1.00        30
+          2H       1.00      1.00      1.00        30
+
+    accuracy                           1.00        60
+   macro avg       1.00      1.00      1.00        60
+weighted avg       1.00      1.00      1.00        60
+
+
+============================================================
+Individual Image Results:
+============================================================
+
+train_1T_1.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_10.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_11.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_12.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_13.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_14.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_15.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_16.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_17.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_18.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_19.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_2.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_20.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_21.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_22.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_23.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_24.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_25.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_26.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_27.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_28.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_29.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_3.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_30.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_4.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_5.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_6.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_7.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_8.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_1T_9.png
+  True Label: 1T
+  Predicted: 1T
+  Status: ✓ CORRECT
+
+train_2H_1.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_10.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_11.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_12.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_13.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_14.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_15.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_16.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_17.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_18.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_19.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_2.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_20.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_21.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_22.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_23.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_24.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_25.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_26.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_27.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_28.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_29.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_3.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_30.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_4.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_5.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_6.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_7.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_8.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+
+train_2H_9.png
+  True Label: 2H
+  Predicted: 2H
+  Status: ✓ CORRECT
+

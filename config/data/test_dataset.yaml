@@ -1,0 +1,45 @@
+# data_path: data/koala_test
+# data_path: ['data/train_pic/Sim_1T_256', 'data/train_pic/Sim_2H_256']
+# data_path: ['data/train_pic/train_try_test1/graphene_AA_train', 'data/train_pic/train_try_test1/graphene_AB_train']
+# data_path: ['data/train_pic/train_try_test1/graphene_AA_train', 'data/train_pic/train_try_test1/graphene_AB_train', 'data/train_pic/train_try_test1/MoS2_1T_train', 'data/train_pic/train_try_test1/MoS2_2H_train']
+# data_path: ['data/train_pic/train_try_test2/graphene_AA_train', 'data/train_pic/train_try_test2/graphene_AB_train', 'data/train_pic/train_try_test2/MoS2_1T_train', 'data/train_pic/train_try_test2/MoS2_2H_train']
+# data_path: ['data/train_pic/train_try_test3/graphene_AA_train', 'data/train_pic/train_try_test3/graphene_AB_train', 'data/train_pic/train_try_test3/MoS2_1T_train', 'data/train_pic/train_try_test3/MoS2_2H_train']
+# data_path: ['data/train_pic/train_try_test4/graphene_AA_train', 'data/train_pic/train_try_test4/graphene_AB_train', 'data/train_pic/train_try_test4/MoS2_1T_train', 'data/train_pic/train_try_test4/MoS2_2H_train']
+# data_path: ['data/train_pic/train_try_test5/graphene_AA_train', 'data/train_pic/train_try_test5/graphene_AB_train', 'data/train_pic/train_try_test5/MoS2_1T_train', 'data/train_pic/train_try_test5/MoS2_2H_train']
+# data_path: ['data/train_pic/graphene_AA_train/images_clean', 'data/train_pic/graphene_AB_train/images_clean', 'data/train_pic/MoS2_1T_train/images_clean', 'data/train_pic/MoS2_2H_train/images_clean']
+# data_path: ['data/train_pic/graphene_AA_train/images_noisy_all', 'data/train_pic/graphene_AB_train/images_noisy_all', 'data/train_pic/MoS2_1T_train/images_noisy_all', 'data/train_pic/MoS2_2H_train/images_noisy_all']
+# data_path: ['data/stem_wash']
+data_path: ['data/train_pic/graphene_AA_train/images_noisy_all', 'data/train_pic/graphene_AB_train/images_noisy_all', 'data/train_pic/stem_wash', 'data/train_pic/MoS2_1T_train/images_noisy_all', 'data/train_pic/MoS2_2H_train/images_noisy_all']
+# 图像尺寸设置 - 修改此值可改变训练和推理的图像分辨率
+# 可选值: 1024, 512, 256 (必须是patch_size=16的倍数)
+image_size: 512
+
+batch_size: 16
+num_workers: 4
+
+global_crop_size: 512   # Global crop 分辨率，可选: 1024, 512, 256
+local_crop_size: 256   # Local crop 分辨率，应小于 global_crop_size
+
+# Multi-crop 数量设置
+num_global_crops: 2     # Global crop 数量（Teacher 和 Student 都会使用）
+num_local_crops: 8      # Local crop 数量（仅 Student 使用）
+
+# Global crop 缩放范围（从原图中随机裁剪的比例）
+global_crop_scale:
+  - 0.32
+  - 1.0
+
+# Local crop 缩放范围
+local_crop_scale:
+  - 0.05
+  - 0.32
+
+horizontal_flips: True
+
+# 颜色增强参数
+color_jitter: True
+brightness: 0.4
+contrast: 0.4
+saturation: 0.2
+hue: 0.1
+color_jitter_p: 0.8
